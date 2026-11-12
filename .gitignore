@@ -1,0 +1,6 @@
+# Never commit credentials
+secrets.h
+**/secrets.h
+
+# macOS clutter
+.DS_Store
