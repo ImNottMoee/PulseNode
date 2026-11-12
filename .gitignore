@@ -2,5 +2,17 @@
 secrets.h
 **/secrets.h
 
-# macOS clutter
+# Arduino / PlatformIO build output
+build/
+**/build/
+.pio/
+*.elf
+*.bin
+*.hex
+*.map
+
+# macOS / editor clutter
 .DS_Store
+**/.DS_Store
+.vscode/
+*.swp
