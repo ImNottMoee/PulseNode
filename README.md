@@ -107,7 +107,6 @@ CHANGELOG.md                          Firmware version history
 - [ ] **Phase 4: Personal alerts.** Per-user alert thresholds and phone notifications
 - [ ] **Phase 5: Reliability.** TLS certificate checking instead of `setInsecure()`, shorter timeouts, offline buffering
 - [ ] **Phase 6: Validation.** Compare against a commercial pulse oximeter and publish the error statistics here
-- [ ] **Phase 7 (optional): Custom PCB.** KiCad board with battery and charging, plus an enclosure
 
 ## Tech
 
