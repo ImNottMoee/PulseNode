@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#000000">
+<meta name="color-scheme" content="dark">
+<title>PulseNode</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --page: #000000; --surface: #0e0e0e; --tile: #1a1a1a; --line: #262626; --grid: #1c1c1c;
+    --text: #f0efea; --muted: #b4b2a9; --faint: #888780;
+    --heart: #e8673c; --oxygen: #3b8ee0; --threshold: #6f6e69;
+    --good-bg: #1f2f12; --good: #97c459;
+    --bad-bg: #3a1919; --bad: #f09595; --bad-line: #791f1f;
+    --accent: #f0efea; --on-accent: #000000;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px; line-height: 1.45;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 20px 16px 40px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+  h2 { font-size: 14px; font-weight: 600; margin: 0; }
+  .sub { color: var(--muted); font-size: 12px; }
+
+  /* ---------- Top bar ---------- */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; }
+  .heart { width: 24px; height: 24px; color: var(--heart); animation: beat 1s infinite; }
+  @keyframes beat { 0%,100% { transform: scale(1); } 12% { transform: scale(1.22); } 24% { transform: scale(1); } }
+  .chip { font-size: 11px; font-weight: 600; letter-spacing: .03em; padding: 3px 7px; border-radius: 6px; background: var(--tile); color: var(--muted); }
+  .meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 5px 10px; border-radius: 8px; background: var(--tile); color: var(--muted); }
+  .pill .d { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.live { background: var(--good-bg); color: var(--good); }
+  .pill.off  { background: var(--bad-bg); color: var(--bad); }
+
+  /* ---------- Session bar ---------- */
+  .session { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .session .who { display: flex; gap: 8px; align-items: center; }
+  select, button {
+    font: inherit; height: 38px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--text); padding: 0 12px;
+  }
+  button { font-weight: 600; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); min-width: 150px; }
+  button:active { transform: scale(.98); }
+  .session .status { flex: 1; min-width: 200px; color: var(--muted); }
+  .timer { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  /* ---------- Alert ---------- */
+  .alert { display: none; align-items: center; gap: 10px; margin-bottom: 14px; padding: 12px 14px; border-radius: 12px;
+           background: var(--bad-bg); color: var(--bad); border: 1px solid var(--bad-line); font-weight: 600; }
+  .alert.show { display: flex; animation: flash 1s infinite; }
+  @keyframes flash { 50% { opacity: .6; } }
+
+  /* ---------- KPI tiles ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+  @media (max-width: 820px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; transition: border-color .3s, background .3s; }
+  .kpi.bad { border-color: var(--bad-line); background: var(--bad-bg); }
+  .kpi .label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+  .kpi .swatch { width: 10px; height: 3px; border-radius: 2px; }
+  .kpi .num { font-size: 40px; font-weight: 600; line-height: 1.1; margin: 4px 0 6px; font-variant-numeric: tabular-nums; }
+  .kpi .num.small { font-size: 30px; }
+  .kpi .unit { font-size: 14px; color: var(--muted); font-weight: 400; margin-left: 3px; }
+  .tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 6px; background: var(--tile); color: var(--muted); }
+  .tag.good { background: var(--good-bg); color: var(--good); }
+  .tag.bad  { background: var(--bad-bg); color: var(--bad); }
+
+  /* ---------- Main grid ---------- */
+  .grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  .stack { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+
+  #wave { width: 100%; height: 110px; display: block; }
+  .chart-box { position: relative; height: 190px; }
+
+  .ranges { display: inline-flex; background: var(--tile); border-radius: 10px; padding: 3px; gap: 2px; }
+  .ranges button { white-space: nowrap; height: 28px; border: 0; background: transparent; font-size: 12px; font-weight: 500; padding: 0 10px; border-radius: 8px; color: var(--muted); }
+  .ranges button.on { background: var(--surface); color: var(--text); font-weight: 600; }
+
+  /* ---------- Tables / lists ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  td { padding: 7px 0; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: 0; }
+  td.r, th.r { text-align: right; }
+  .empty { color: var(--faint); padding: 10px 0; font-size: 13px; }
+  .scroll { max-height: 260px; overflow-y: auto; }
+
+  .foot { margin-top: 18px; text-align: center; color: var(--faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="brand">
+      <svg class="heart" id="heart" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 21s-7.5-4.6-9.6-9.2C.8 8.3 2.9 4.5 6.6 4.5c2.1 0 3.6 1.2 5.4 3.2 1.8-2 3.3-3.2 5.4-3.2 3.7 0 5.8 3.8 4.2 7.3C19.5 16.4 12 21 12 21z"/>
+      </svg>
+      PulseNode
+      <span class="chip" id="sim" hidden>SIMULATED</span>
+    </div>
+    <div class="meta">
+      <span class="pill">Device: <span id="device"></span></span>
+      <span class="pill">Updated <span id="updated">—</span></span>
+      <span class="pill" id="conn"><span class="d"></span><span id="connText">Connecting…</span></span>
+    </div>
+  </div>
+
+  <!-- Session bar -->
+  <div class="card session">
+    <div class="who">
+      <select id="user" aria-label="Who is measuring">
+        <option>Moe</option>
+        <option>Guest</option>
+      </select>
+      <button class="primary" id="startBtn">Start measurement</button>
+    </div>
+    <div class="status" id="status">Press Start, then place your finger on the sensor.</div>
+    <div class="timer" id="timer">00:00</div>
+  </div>
+
+  <!-- Alert banner -->
+  <div class="alert" id="alert" role="alert">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+    <span id="alertText"></span>
+  </div>
+
+  <!-- KPI tiles -->
+  <div class="kpis">
+    <div class="kpi" id="hrTile">
+      <div class="label"><span class="swatch" style="background:var(--heart)"></span>Heart rate</div>
+      <div class="num"><span id="bpm">--</span><span class="unit">BPM</span></div>
+      <span class="tag" id="hrTag">Waiting</span>
+    </div>
+    <div class="kpi" id="oxTile">
+      <div class="label"><span class="swatch" style="background:var(--oxygen)"></span>Blood oxygen (SpO₂)</div>
+      <div class="num"><span id="spo2">--</span><span class="unit">%</span></div>
+      <span class="tag" id="oxTag">Waiting</span>
+    </div>
+    <div class="kpi">
+      <div class="label">Average heart rate</div>
+      <div class="num small"><span id="avgHr">--</span><span class="unit">BPM</span></div>
+      <span class="sub">Range <span id="hrRange">--</span></span>
+    </div>
+    <div class="kpi">
+      <div class="label">Lowest SpO₂</div>
+      <div class="num small"><span id="minOx">--</span><span class="unit">%</span></div>
+      <span class="sub">Average <span id="avgOx">--</span>%</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Left column -->
+    <div class="stack">
+      <div class="card">
+        <div class="card-head">
+          <h2>Live pulse waveform</h2>
+          <span class="sub" id="waveNote">Paced by live heart rate</span>
+        </div>
+        <canvas id="wave" aria-label="Live pulse waveform"></canvas>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <h2>Trends</h2>
+            <span class="sub">Dashed lines are the alert thresholds</span>
+          </div>
+          <div class="ranges" id="ranges">
+            <button data-range="60000">1 min</button>
+            <button data-range="300000" class="on">5 min</button>
+            <button data-range="0">All</button>
+          </div>
+        </div>
+        <div class="card-head" style="margin-bottom:4px"><span class="sub">Heart rate (BPM)</span></div>
+        <div class="chart-box"><canvas id="hrChart" aria-label="Heart rate over time"></canvas></div>
+        <div class="card-head" style="margin:14px 0 4px"><span class="sub">Blood oxygen (SpO₂ %)</span></div>
+        <div class="chart-box"><canvas id="oxChart" aria-label="SpO2 over time"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Right column -->
+    <div class="stack">
+      <div class="card">
+        <div class="card-head"><h2>Device health</h2><span class="sub" id="fw">Firmware --</span></div>
+        <table>
+          <tr><td>Wi-Fi signal</td><td class="r"><span id="rssi">--</span> <span class="tag" id="rssiTag" hidden></span></td></tr>
+          <tr><td>Uptime</td><td class="r" id="uptime">--</td></tr>
+          <tr><td>Update rate</td><td class="r" id="rate">--</td></tr>
+          <tr><td>Upload time <span class="sub">(device → cloud)</span></td><td class="r" id="upMs">--</td></tr>
+          <tr><td>Delivery delay <span class="sub">(cloud → you)</span></td><td class="r" id="delay">--</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Session summary</h2><span class="sub" id="whoLabel">Moe</span></div>
+        <table>
+          <tr><th></th><th class="r">Min</th><th class="r">Avg</th><th class="r">Max</th></tr>
+          <tr><td>Heart rate</td><td class="r" id="hrMin">--</td><td class="r" id="hrAvg">--</td><td class="r" id="hrMax">--</td></tr>
+          <tr><td>SpO₂ %</td><td class="r" id="oxMin">--</td><td class="r" id="oxAvg">--</td><td class="r" id="oxMax">--</td></tr>
+        </table>
+        <table style="margin-top:10px">
+          <tr><td>Readings</td><td class="r" id="count">0</td></tr>
+          <tr><td>Alerts</td><td class="r" id="alertCount">0</td></tr>
+          <tr><td>Time in alert</td><td class="r" id="alertTime">0 s</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Alert log</h2></div>
+        <div id="alertLog" class="scroll" style="max-height:220px"><div class="empty">No alerts this session</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Recent readings</h2></div>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Time</th><th class="r">BPM</th><th class="r">SpO₂</th><th class="r">Status</th></tr></thead>
+            <tbody id="readings"><tr><td colspan="4" class="empty">Waiting for readings…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">PulseNode · Student portfolio project, not a medical device</div>
+</div>
+
+<script>
+  // ================= Settings =================
+  const DB_URL    = "https://pulsenode-ac8b7-default-rtdb.firebaseio.com";
+  const DEVICE_ID = "pulsenode-01";
+  const OFFLINE_AFTER_MS = 6000;
+  const SPO2_LOW = 92, HR_HIGH = 120, HR_LOW = 50;   // same thresholds as the device
+
+  const $ = id => document.getElementById(id);
+  const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  $("device").textContent = DEVICE_ID;
+
+  // ================= State =================
+  const live = {};                 // latest values from Firebase
+  let points = [];                 // { t, bpm, spo2, alert } for this session
+  let alerts = [];                 // { type, start, end }
+  let lastMsg = 0;
+  let sessionStart = Date.now();
+  let measuring = false;
+  let rangeMs = 300000;
+
+  // ================= Session controls =================
+  $("user").addEventListener("change", () => { $("whoLabel").textContent = $("user").value; });
+
+  $("startBtn").addEventListener("click", () => {
+    measuring = !measuring;
+    if (measuring) {
+      points = []; alerts = []; sessionStart = Date.now();
+      $("startBtn").textContent = "Stop measurement";
+      $("status").textContent = "Measuring " + $("user").value + "… keep your finger still.";
+    } else {
+      $("startBtn").textContent = "Start measurement";
+      $("status").textContent = "Session stopped. Saving to profiles comes with accounts.";
+    }
+    renderAll();
+  });
+
+  setInterval(() => {
+    const s = Math.floor((Date.now() - sessionStart) / 1000);
+    $("timer").textContent = String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
+  }, 500);
+
+  $("ranges").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    [...$("ranges").children].forEach(x => x.classList.toggle("on", x === b));
+    rangeMs = Number(b.dataset.range);
+    updateCharts();
+  });
+
+  // ================= Helpers =================
+  const fmtAxis = t => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" }).replace(/\s?[AP]M$/i, "");
+  const fmtTime = t => new Date(t).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
+  const avg = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
+  const fmtDur = ms => { const s = Math.round(ms / 1000); return s < 60 ? s + " s" : Math.floor(s / 60) + " m " + (s % 60) + " s"; };
+
+  function hrStatus(b)  { return b > HR_HIGH ? ["High", "bad"] : b < HR_LOW ? ["Low", "bad"] : ["Normal", "good"]; }
+  function oxStatus(o)  { return o < SPO2_LOW ? ["Low", "bad"] : ["Normal", "good"]; }
+  function setTag(el, [text, kind]) {
+    el.className = "tag " + kind;
+    el.textContent = (kind === "good" ? "✓ " : "! ") + text;
+  }
+
+
+  // ----- Device health -----
+  const recvTimes = [], delays = [];
+  function rssiQuality(r) {
+    return r >= -55 ? ["Excellent", "good"] : r >= -67 ? ["Good", "good"] : r >= -75 ? ["Fair", ""] : ["Weak", "bad"];
+  }
+  const fmtUptime = sec => {
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return (h ? h + "h " : "") + (h || m ? String(m).padStart(h ? 2 : 1, "0") + "m " : "") + String(s).padStart(2, "0") + "s";
+  };
+  function renderHealth() {
+    if (live.fw) $("fw").textContent = "Firmware " + live.fw;
+    if (live.rssi != null) {
+      $("rssi").textContent = live.rssi + " dBm";
+      const [q, kind] = rssiQuality(live.rssi);
+      const tag = $("rssiTag"); tag.hidden = false; tag.className = "tag " + kind; tag.textContent = q;
+    }
+    if (live.uptime != null) $("uptime").textContent = fmtUptime(live.uptime);
+    if (live.uploadMs) $("upMs").textContent = live.uploadMs + " ms";
+    if (recvTimes.length > 1) {
+      const gaps = recvTimes.slice(1).map((t, i) => t - recvTimes[i]);
+      $("rate").textContent = "every " + (avg(gaps) / 1000).toFixed(1) + " s";
+    }
+    if (delays.length) $("delay").textContent = "~" + (avg(delays) / 1000).toFixed(2) + " s";
+  }
+
+  // ================= Charts (one axis each) =================
+  function baseOptions(minY, maxY, unit) {
+    return {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          filter: item => item.datasetIndex === 0,
+          displayColors: false,
+          callbacks: { title: items => items.length ? fmtTime(items[0].parsed.x) : "", label: c => c.parsed.y + " " + unit }
+        }
+      },
+      scales: {
+        x: { type: "linear", ticks: { color: css("--faint"), maxTicksLimit: 5, maxRotation: 0, font: { size: 11 }, callback: v => fmtAxis(v) }, grid: { display: false }, border: { color: css("--line") } },
+        y: { suggestedMin: minY, suggestedMax: maxY, ticks: { color: css("--faint"), maxTicksLimit: 5, font: { size: 11 } }, grid: { color: css("--grid") }, border: { display: false } }
+      },
+      elements: { point: { radius: 0, hoverRadius: 5, hitRadius: 12 }, line: { borderWidth: 2, tension: 0.25 } }
+    };
+  }
+
+  function makeChart(id, colorVar, minY, maxY, unit, thresholds) {
+    const color = css(colorVar);
+    const datasets = [{ data: [], borderColor: color, backgroundColor: color + "1f", fill: true, pointHoverBackgroundColor: color, pointHoverBorderColor: css("--surface"), pointHoverBorderWidth: 2 }];
+    thresholds.forEach(v => datasets.push({ data: [], borderColor: css("--threshold"), borderWidth: 1, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 0, fill: false, _threshold: v }));
+    return new Chart($(id), { type: "line", data: { labels: [], datasets }, options: baseOptions(minY, maxY, unit) });
+  }
+
+  const hrChart = makeChart("hrChart", "--heart", 55, 95, "BPM", [HR_LOW, HR_HIGH]);
+  const oxChart = makeChart("oxChart", "--oxygen", 86, 100, "%", [SPO2_LOW]);
+
+  function fillChart(chart, view, key, xMin, xMax) {
+    chart.data.datasets[0].data = view.map(p => ({ x: p.t, y: p[key] }));
+    chart.data.datasets.slice(1).forEach(ds => { ds.data = [{ x: xMin, y: ds._threshold }, { x: xMax, y: ds._threshold }]; });
+    chart.options.scales.x.min = xMin;
+    chart.options.scales.x.max = xMax;
+    chart.update("none");
+  }
+
+  // The chart always spans the chosen window (1 min, 5 min, or everything since the page opened),
+  // and slides forward every second so the newest reading sits at the right edge.
+  function updateCharts() {
+    const last = points.length ? points[points.length - 1].t : 0;
+    const xMax = Math.max(Date.now(), last);
+    const xMin = rangeMs ? xMax - rangeMs : (points.length ? points[0].t : xMax - 60000);
+    const view = points.filter(p => p.t >= xMin);
+    fillChart(hrChart, view, "bpm", xMin, xMax);
+    fillChart(oxChart, view, "spo2", xMin, xMax);
+  }
+  setInterval(updateCharts, 1000);
+
+  // Re-color charts when the system switches light/dark
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    [[hrChart, "--heart"], [oxChart, "--oxygen"]].forEach(([ch, v]) => {
+      const c = css(v);
+      ch.data.datasets[0].borderColor = c; ch.data.datasets[0].backgroundColor = c + "1f";
+      ch.data.datasets.slice(1).forEach(ds => ds.borderColor = css("--threshold"));
+      ch.options.scales.x.ticks.color = ch.options.scales.y.ticks.color = css("--faint");
+      ch.options.scales.y.grid.color = css("--grid");
+      ch.update("none");
+    });
+  });
+
+  // ================= Render =================
+  function renderAll() {
+    const { bpm, spo2, alert, simulated, updatedAt } = live;
+
+    $("bpm").textContent = bpm ?? "--";
+    $("spo2").textContent = spo2 ?? "--";
+    $("sim").hidden = !simulated;
+    if (updatedAt) $("updated").textContent = fmtTime(updatedAt);
+    if (bpm) { $("heart").style.animationDuration = (60 / bpm) + "s"; setTag($("hrTag"), hrStatus(bpm)); }
+    if (spo2) setTag($("oxTag"), oxStatus(spo2));
+
+    $("alertText").textContent = alert || "";
+    $("alert").classList.toggle("show", !!alert);
+    $("oxTile").classList.toggle("bad", !!(alert && alert.includes("SpO2")));
+    $("hrTile").classList.toggle("bad", !!(alert && alert.includes("HR")));
+
+    // Session summary
+    const hrs = points.map(p => p.bpm), oxs = points.map(p => p.spo2);
+    const r = v => v == null ? "--" : Math.round(v);
+    $("hrMin").textContent = hrs.length ? Math.min(...hrs) : "--";
+    $("hrMax").textContent = hrs.length ? Math.max(...hrs) : "--";
+    $("hrAvg").textContent = r(avg(hrs));
+    $("oxMin").textContent = oxs.length ? Math.min(...oxs) : "--";
+    $("oxMax").textContent = oxs.length ? Math.max(...oxs) : "--";
+    $("oxAvg").textContent = r(avg(oxs));
+    $("avgHr").textContent = r(avg(hrs));
+    $("hrRange").textContent = hrs.length ? Math.min(...hrs) + "–" + Math.max(...hrs) : "--";
+    $("minOx").textContent = oxs.length ? Math.min(...oxs) : "--";
+    $("avgOx").textContent = r(avg(oxs));
+    $("count").textContent = points.length;
+    $("alertCount").textContent = alerts.length;
+    $("alertTime").textContent = fmtDur(alerts.reduce((s, a) => s + ((a.end || Date.now()) - a.start), 0));
+
+    // Alert log
+    $("alertLog").innerHTML = alerts.length
+      ? "<table>" + alerts.slice().reverse().map(a =>
+          `<tr><td>${a.type}</td><td>${fmtTime(a.start)}</td><td class="r">${a.end ? fmtDur(a.end - a.start) : "ongoing"}</td></tr>`
+        ).join("") + "</table>"
+      : '<div class="empty">No alerts this session</div>';
+
+    // Recent readings table (newest first)
+    $("readings").innerHTML = points.length
+      ? points.slice(-25).reverse().map(p => {
+          const ok = !p.alert;
+          return `<tr><td>${fmtTime(p.t)}</td><td class="r">${p.bpm}</td><td class="r">${p.spo2}%</td>` +
+                 `<td class="r"><span class="tag ${ok ? "good" : "bad"}">${ok ? "✓ OK" : "! Alert"}</span></td></tr>`;
+        }).join("")
+      : '<tr><td colspan="4" class="empty">Waiting for readings…</td></tr>';
+
+    renderHealth();
+    updateCharts();
+  }
+
+  // ================= Live pulse waveform =================
+  const wave = $("wave"), wctx = wave.getContext("2d");
+  const samples = new Array(240).fill(0);
+  let phase = 0, lastT = performance.now();
+  const ppg = p => Math.exp(-Math.pow((p - 0.15) / 0.06, 2)) + 0.35 * Math.exp(-Math.pow((p - 0.40) / 0.07, 2));
+
+  function drawWave(t) {
+    const dt = Math.min((t - lastT) / 1000, 0.1); lastT = t;
+    const isLive = lastMsg && Date.now() - lastMsg < OFFLINE_AFTER_MS;
+    if (isLive && live.bpm) { phase = (phase + (live.bpm / 60) * dt) % 1; samples.push(ppg(phase)); }
+    else samples.push(0);
+    samples.shift();
+
+    const dpr = window.devicePixelRatio || 1, w = wave.clientWidth, h = wave.clientHeight;
+    if (wave.width !== Math.round(w * dpr)) { wave.width = Math.round(w * dpr); wave.height = Math.round(h * dpr); }
+    wctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    wctx.clearRect(0, 0, w, h);
+
+    wctx.strokeStyle = css("--grid"); wctx.lineWidth = 1;
+    for (let gy = 0.25; gy < 1; gy += 0.25) { wctx.beginPath(); wctx.moveTo(0, h * gy); wctx.lineTo(w, h * gy); wctx.stroke(); }
+
+    wctx.beginPath();
+    samples.forEach((v, i) => {
+      const x = i * (w / (samples.length - 1)), y = h - 8 - (v / 1.1) * (h - 18);
+      i ? wctx.lineTo(x, y) : wctx.moveTo(x, y);
+    });
+    wctx.strokeStyle = css("--heart"); wctx.lineWidth = 2; wctx.lineJoin = "round"; wctx.stroke();
+    requestAnimationFrame(drawWave);
+  }
+  requestAnimationFrame(drawWave);
+
+  // ================= Firebase live stream =================
+  function applyChange(path, data) {
+    if (path === "/") { for (const k of Object.keys(live)) delete live[k]; Object.assign(live, data || {}); }
+    else { const key = path.slice(1); if (data === null) delete live[key]; else live[key] = data; }
+  }
+
+  let prevAlert = null;
+  function onMessage(e) {
+    const msg = JSON.parse(e.data);
+    if (e.type === "patch") for (const [k, v] of Object.entries(msg.data || {})) applyChange("/" + k, v);
+    else applyChange(msg.path, msg.data);
+    if (live.bpm == null) return;
+
+    lastMsg = Date.now();
+    const t = live.updatedAt || Date.now();
+    recvTimes.push(lastMsg); if (recvTimes.length > 10) recvTimes.shift();
+    if (live.updatedAt && lastMsg - live.updatedAt < 30000) { delays.push(Math.max(0, lastMsg - live.updatedAt)); if (delays.length > 10) delays.shift(); }
+    points.push({ t, bpm: live.bpm, spo2: live.spo2, alert: live.alert || null });
+    if (points.length > 2000) points.shift();
+
+    // Track alert start/end for the log
+    const a = live.alert || null;
+    if (a && a !== prevAlert) {
+      if (alerts.length && !alerts[alerts.length - 1].end) alerts[alerts.length - 1].end = t;
+      alerts.push({ type: a, start: t, end: null });
+    } else if (!a && prevAlert && alerts.length) {
+      alerts[alerts.length - 1].end = t;
+    }
+    prevAlert = a;
+
+    renderAll();
+  }
+
+  const stream = new EventSource(`${DB_URL}/devices/${DEVICE_ID}/live.json`);
+  stream.addEventListener("put", onMessage);
+  stream.addEventListener("patch", onMessage);
+
+  // ================= Connection pill =================
+  setInterval(() => {
+    const pill = $("conn");
+    if (!lastMsg) { $("connText").textContent = "Connecting…"; pill.className = "pill"; return; }
+    const ok = Date.now() - lastMsg < OFFLINE_AFTER_MS;
+    $("connText").textContent = ok ? "Live" : "Offline";
+    pill.className = "pill " + (ok ? "live" : "off");
+  }, 1000);
+</script>
+</body>
+</html>
