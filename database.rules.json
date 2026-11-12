@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "devices": {
+      "$deviceId": {
+        ".read": "auth != null",
+        "live": {
+          ".write": "auth != null && auth.uid === 'zmQZBxSzuDdamYAh2NouQMHa0Ov1'"
+        }
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    }
+  }
+}
