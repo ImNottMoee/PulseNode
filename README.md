@@ -38,7 +38,7 @@
 
 ```mermaid
 flowchart LR
-    S[MAX30102 sensor] -- I2C --> E[ESP32]
+    S["MAX30102 sensor<br/>(integration in progress)"] -- I2C --> E[ESP32]
     E -- I2C --> O[OLED display]
     E -- "HTTPS, every 1 s<br/>+ instantly on alerts" --> F[(Firebase<br/>Realtime Database)]
     A[Firebase Auth] -. device + user logins .- F
@@ -68,21 +68,23 @@ flowchart LR
 | Data (SDA) | GPIO 21 | SDA | SDA |
 | Clock (SCL) | GPIO 22 | SCL | SCL |
 
-I2C addresses: OLED `0x3C`, MAX30102 `0x57`.
+I2C addresses: OLED `0x3C`, MAX30102 `0x57`. Full wiring notes, including breadboard placement and known module quirks, are in [docs/wiring.md](docs/wiring.md).
 
 ## Repository layout
 
 ```
-index.html                         Web dashboard (served by GitHub Pages)
-database.rules.json                Firebase Realtime Database security rules
-firmware/PulseNode/PulseNode.ino   ESP32 firmware
+index.html                            Web dashboard (served by GitHub Pages)
+database.rules.json                   Firebase Realtime Database security rules
+firmware/PulseNode/PulseNode.ino      ESP32 firmware (current version: 0.4.0)
 firmware/PulseNode/secrets.example.h  Template for Wi-Fi and Firebase credentials
+docs/wiring.md                        Wiring table and pin notes
+CHANGELOG.md                          Firmware version history
 ```
 
 ## Setup
 
 **Firmware**
-1. Install Arduino IDE 2.x, the **esp32 by Espressif Systems** board package, and the libraries **Adafruit SSD1306** (with Adafruit GFX) and **SparkFun MAX3010x**.
+1. Install Arduino IDE 2.x, the **esp32 by Espressif Systems** board package, and the **Adafruit SSD1306** library (with Adafruit GFX). The **SparkFun MAX3010x** library is only needed for the upcoming sensor work; firmware 0.4.0 doesn't use it yet.
 2. Copy `firmware/PulseNode/secrets.example.h` to `secrets.h` in the same folder and fill in your Wi-Fi details, device account and Firebase API key. `secrets.h` is git-ignored.
 3. Board: **ESP32 Dev Module**. Upload, then check the Serial Monitor (115200 baud) for `Device signed in to Firebase` and `HTTP 200`.
 
@@ -97,16 +99,15 @@ firmware/PulseNode/secrets.example.h  Template for Wi-Fi and Firebase credential
 
 ## Roadmap
 
-- [x] OLED display with live vitals, waveform and alerts
-- [x] Wi-Fi and Firebase cloud uploads (1 s rhythm + instant alerts)
-- [x] Live web dashboard with trends, alert log and device health
-- [x] User accounts with PINs and locked database rules
-- [ ] Real MAX30102 readings with signal filtering, peak detection and SpO₂ (ratio-of-ratios)
-- [ ] Finger detection and signal-quality indicator
-- [ ] "Start measurement" sessions saved to each user's history
-- [ ] Home-screen app (installable web app)
-- [ ] Per-user alert thresholds and phone notifications
-- [ ] Accuracy validation against a commercial pulse oximeter
+**Done:** OLED display with live vitals, waveform and alerts · Wi-Fi and Firebase uploads (1 s rhythm + instant alerts) · live web dashboard with trends, alert log and device health · user accounts with PINs and locked database rules · GitHub Pages hosting. See [CHANGELOG.md](CHANGELOG.md).
+
+- [ ] **Phase 1: Real sensor.** Solder the MAX30102 and read raw red/IR data; filtering, peak detection, heart rate, SpO₂ via ratio-of-ratios, finger detection and a signal-quality indicator
+- [ ] **Phase 2: Sessions and history.** "Start measurement" sessions saved to each user's history in Firebase, plus a history page
+- [ ] **Phase 3: Home-screen app.** Installable web app (manifest, icon, full-screen)
+- [ ] **Phase 4: Personal alerts.** Per-user alert thresholds and phone notifications
+- [ ] **Phase 5: Reliability.** TLS certificate checking instead of `setInsecure()`, shorter timeouts, offline buffering
+- [ ] **Phase 6: Validation.** Compare against a commercial pulse oximeter and publish the error statistics here
+- [ ] **Phase 7 (optional): Custom PCB.** KiCad board with battery and charging, plus an enclosure
 
 ## Tech
 
