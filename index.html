@@ -18,6 +18,7 @@
   }
 
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0; background: var(--page); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -95,11 +96,66 @@
   .empty { color: var(--faint); padding: 10px 0; font-size: 13px; }
   .scroll { max-height: 260px; overflow-y: auto; }
 
+
+  /* ---------- Login screen ---------- */
+  .auth { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+  .auth-card { width: 100%; max-width: 360px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 28px 22px; }
+  .auth-brand { display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 22px; font-weight: 600; margin-bottom: 6px; }
+  .auth-title { text-align: center; color: var(--muted); margin-bottom: 20px; }
+  .tabs { display: flex; background: var(--tile); border-radius: 10px; padding: 3px; margin-bottom: 18px; }
+  .tabs button { flex: 1; height: 32px; border: 0; background: transparent; color: var(--muted); font-weight: 500; border-radius: 8px; }
+  .tabs button.on { background: var(--surface); color: var(--text); font-weight: 600; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .field input { width: 100%; height: 42px; border-radius: 10px; border: 1px solid var(--line); background: var(--page); color: var(--text); font: inherit; font-size: 16px; padding: 0 12px; }
+  .field input.pin { letter-spacing: .4em; font-variant-numeric: tabular-nums; }
+  .field input:focus { outline: none; border-color: var(--muted); }
+  .auth-card button.primary { width: 100%; height: 44px; margin-top: 6px; }
+  .auth-error { color: var(--bad); font-size: 13px; min-height: 18px; margin-top: 10px; text-align: center; }
+  .auth-note { color: var(--faint); font-size: 12px; text-align: center; margin-top: 14px; }
+  .signed { display: flex; align-items: center; gap: 8px; }
+  .signed b { font-weight: 600; }
+  button.ghost { height: 34px; background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
+
   .foot { margin-top: 18px; text-align: center; color: var(--faint); font-size: 12px; }
 </style>
 </head>
 <body>
-<div class="wrap">
+<!-- Login / create account -->
+<div class="auth" id="authScreen" hidden>
+  <div class="auth-card">
+    <div class="auth-brand">
+      <svg class="heart" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 21s-7.5-4.6-9.6-9.2C.8 8.3 2.9 4.5 6.6 4.5c2.1 0 3.6 1.2 5.4 3.2 1.8-2 3.3-3.2 5.4-3.2 3.7 0 5.8 3.8 4.2 7.3C19.5 16.4 12 21 12 21z"/>
+      </svg>
+      PulseNode
+    </div>
+    <div class="auth-title" id="authTitle">PIN required</div>
+    <div class="tabs" id="authTabs">
+      <button data-mode="login" class="on">Log in</button>
+      <button data-mode="signup">Create account</button>
+    </div>
+    <form id="authForm" autocomplete="off">
+      <div class="field">
+        <label for="nameIn">Name</label>
+        <input id="nameIn" maxlength="24" placeholder="Moe" autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="pinIn">6-digit PIN</label>
+        <input id="pinIn" class="pin" type="password" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="current-password">
+      </div>
+      <div class="field" id="pin2Field" hidden>
+        <label for="pin2In">Confirm PIN</label>
+        <input id="pin2In" class="pin" type="password" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="new-password">
+      </div>
+      <button class="primary" id="authBtn" type="submit">Log in</button>
+      <div class="auth-error" id="authError"></div>
+    </form>
+    <div class="auth-note">Student project, not a medical device</div>
+  </div>
+</div>
+
+<div class="wrap" id="app" hidden>
 
   <!-- Top bar -->
   <div class="topbar">
@@ -120,11 +176,9 @@
   <!-- Session bar -->
   <div class="card session">
     <div class="who">
-      <select id="user" aria-label="Who is measuring">
-        <option>Moe</option>
-        <option>Guest</option>
-      </select>
+      <span class="signed">Signed in as <b id="userName">—</b></span>
       <button class="primary" id="startBtn">Start measurement</button>
+      <button class="ghost" id="logoutBtn">Log out</button>
     </div>
     <div class="status" id="status">Press Start, then place your finger on the sensor.</div>
     <div class="timer" id="timer">00:00</div>
@@ -237,10 +291,28 @@
   <div class="foot">PulseNode · Student portfolio project, not a medical device</div>
 </div>
 
-<script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getDatabase, ref, onValue, set, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
   // ================= Settings =================
-  const DB_URL    = "https://pulsenode-ac8b7-default-rtdb.firebaseio.com";
+  // Firebase web config (safe to be public; the database rules are what protect the data)
+  const firebaseConfig = {
+    apiKey: "AIzaSyCnYm221WQDpSaoocQDyv4kd4fz1zrB6E8",
+    authDomain: "pulsenode-ac8b7.firebaseapp.com",
+    databaseURL: "https://pulsenode-ac8b7-default-rtdb.firebaseio.com",
+    projectId: "pulsenode-ac8b7",
+    storageBucket: "pulsenode-ac8b7.firebasestorage.app",
+    messagingSenderId: "897575286627",
+    appId: "1:897575286627:web:3bcc928249b3d271d00556"
+  };
   const DEVICE_ID = "pulsenode-01";
+  const NAME_DOMAIN = "users.pulsenode.app";   // names become sign-in IDs like moe@users.pulsenode.app
+
+  const fbApp = initializeApp(firebaseConfig);
+  const auth = getAuth(fbApp);
+  const db = getDatabase(fbApp);
   const OFFLINE_AFTER_MS = 6000;
   const SPO2_LOW = 92, HR_HIGH = 120, HR_LOW = 50;   // same thresholds as the device
 
@@ -258,14 +330,14 @@
   let rangeMs = 300000;
 
   // ================= Session controls =================
-  $("user").addEventListener("change", () => { $("whoLabel").textContent = $("user").value; });
+  let currentName = "";
 
   $("startBtn").addEventListener("click", () => {
     measuring = !measuring;
     if (measuring) {
       points = []; alerts = []; sessionStart = Date.now();
       $("startBtn").textContent = "Stop measurement";
-      $("status").textContent = "Measuring " + $("user").value + "… keep your finger still.";
+      $("status").textContent = "Measuring " + currentName + "… keep your finger still.";
     } else {
       $("startBtn").textContent = "Start measurement";
       $("status").textContent = "Session stopped. Saving to profiles comes with accounts.";
@@ -471,17 +543,13 @@
   }
   requestAnimationFrame(drawWave);
 
-  // ================= Firebase live stream =================
-  function applyChange(path, data) {
-    if (path === "/") { for (const k of Object.keys(live)) delete live[k]; Object.assign(live, data || {}); }
-    else { const key = path.slice(1); if (data === null) delete live[key]; else live[key] = data; }
-  }
-
+  // ================= Firebase live data (signed-in users only) =================
   let prevAlert = null;
-  function onMessage(e) {
-    const msg = JSON.parse(e.data);
-    if (e.type === "patch") for (const [k, v] of Object.entries(msg.data || {})) applyChange("/" + k, v);
-    else applyChange(msg.path, msg.data);
+  let stopLive = null;
+
+  function onLive(data) {
+    for (const k of Object.keys(live)) delete live[k];
+    Object.assign(live, data || {});
     if (live.bpm == null) return;
 
     lastMsg = Date.now();
@@ -504,9 +572,90 @@
     renderAll();
   }
 
-  const stream = new EventSource(`${DB_URL}/devices/${DEVICE_ID}/live.json`);
-  stream.addEventListener("put", onMessage);
-  stream.addEventListener("patch", onMessage);
+  function startLive() {
+    stopLive = onValue(ref(db, `devices/${DEVICE_ID}/live`), snap => onLive(snap.val()),
+      err => { $("status").textContent = "Can't read live data: " + err.message; });
+  }
+
+  // ================= Accounts: name + 6-digit PIN =================
+  let authMode = "login";
+  const slug = name => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const nameToEmail = name => slug(name) + "@" + NAME_DOMAIN;
+
+  $("authTabs").addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    authMode = b.dataset.mode;
+    [...$("authTabs").children].forEach(x => x.classList.toggle("on", x === b));
+    const signup = authMode === "signup";
+    $("pin2Field").hidden = !signup;
+    $("authBtn").textContent = signup ? "Create account" : "Log in";
+    $("authTitle").textContent = signup ? "Create your account" : "PIN required";
+    $("authError").textContent = "";
+  });
+
+  ["nameIn", "pinIn", "pin2In"].forEach(id => $(id).addEventListener("input", () => {
+    $("authError").textContent = "";
+    if (id !== "nameIn") $(id).value = $(id).value.replace(/\D/g, "").slice(0, 6);
+  }));
+
+  const friendly = code => ({
+    "auth/invalid-credential": "Wrong name or PIN.",
+    "auth/wrong-password": "Wrong name or PIN.",
+    "auth/user-not-found": "Wrong name or PIN.",
+    "auth/invalid-email": "Use letters and numbers in your name.",
+    "auth/email-already-in-use": "That name is taken. Try another, or log in.",
+    "auth/too-many-requests": "Too many tries. Wait a minute and try again.",
+    "auth/network-request-failed": "No internet connection.",
+    "auth/operation-not-allowed": "Accounts aren't enabled in Firebase yet."
+  }[code] || "Something went wrong (" + code + ").");
+
+  $("authForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const name = $("nameIn").value.trim();
+    const pin = $("pinIn").value;
+    const err = $("authError");
+    if (!slug(name)) { err.textContent = "Enter your name."; $("nameIn").focus(); return; }
+    if (!/^\d{6}$/.test(pin)) { err.textContent = "PIN must be exactly 6 digits."; $("pinIn").focus(); return; }
+    if (authMode === "signup" && $("pin2In").value !== pin) { err.textContent = "PINs don't match."; $("pin2In").focus(); return; }
+
+    $("authBtn").disabled = true;
+    try {
+      if (authMode === "signup") {
+        const cred = await createUserWithEmailAndPassword(auth, nameToEmail(name), pin);
+        await updateProfile(cred.user, { displayName: name });
+        await set(ref(db, `users/${cred.user.uid}/profile`), { name, createdAt: serverTimestamp() });
+        currentName = name; $("userName").textContent = name; $("whoLabel").textContent = name;
+      } else {
+        await signInWithEmailAndPassword(auth, nameToEmail(name), pin);
+      }
+      $("pinIn").value = ""; $("pin2In").value = "";
+    } catch (ex) {
+      err.textContent = friendly(ex.code);
+    } finally {
+      $("authBtn").disabled = false;
+    }
+  });
+
+  $("logoutBtn").addEventListener("click", () => signOut(auth));
+
+  onAuthStateChanged(auth, user => {
+    if (user) {
+      currentName = user.displayName || user.email.split("@")[0];
+      $("userName").textContent = currentName;
+      $("whoLabel").textContent = currentName;
+      $("authScreen").hidden = true;
+      $("app").hidden = false;
+      if (!stopLive) startLive();
+      renderAll();
+    } else {
+      if (stopLive) { stopLive(); stopLive = null; }
+      for (const k of Object.keys(live)) delete live[k];
+      points = []; alerts = []; lastMsg = 0; prevAlert = null;
+      $("app").hidden = true;
+      $("authScreen").hidden = false;
+      $("nameIn").focus();
+    }
+  });
 
   // ================= Connection pill =================
   setInterval(() => {
