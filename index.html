@@ -42,17 +42,30 @@
   .pill.off  { background: var(--bad-bg); color: var(--bad); }
 
   /* ---------- Session bar ---------- */
-  .session { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
-  .session .who { display: flex; gap: 8px; align-items: center; }
+  .session { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 18px; margin-bottom: 14px; }
+  .user { display: flex; align-items: center; gap: 10px; padding-right: 18px; border-right: 1px solid var(--line); }
+  .avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--tile); color: var(--text);
+            display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 15px; }
+  .uname { font-weight: 600; font-size: 15px; line-height: 1.2; }
+  .session .status { color: var(--muted); min-width: 0; }
+  .actions { display: flex; align-items: center; gap: 10px; }
+  .timer-box { display: flex; flex-direction: column; align-items: flex-end; margin-right: 6px; line-height: 1.2; }
+  .timer { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 16px; }
   select, button {
     font: inherit; height: 38px; border-radius: 10px; border: 1px solid var(--line);
-    background: var(--surface); color: var(--text); padding: 0 12px;
+    background: var(--surface); color: var(--text); padding: 0 14px;
   }
-  button { font-weight: 600; cursor: pointer; }
-  button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); min-width: 150px; }
+  button { font-weight: 600; cursor: pointer; white-space: nowrap; }
+  button.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
   button:active { transform: scale(.98); }
-  .session .status { flex: 1; min-width: 200px; color: var(--muted); }
-  .timer { font-variant-numeric: tabular-nums; font-weight: 600; }
+  @media (max-width: 760px) {
+    .session { grid-template-columns: minmax(0, 1fr) auto; gap: 12px 14px; }
+    .user { border-right: 0; padding-right: 0; }
+    .session .status { grid-column: 1 / -1; grid-row: 2; }
+    .actions { grid-column: 1 / -1; grid-row: 3; }
+    .actions .primary { flex: 1; }
+    .timer-box { align-items: flex-start; margin-right: 0; }
+  }
 
   /* ---------- Alert ---------- */
   .alert { display: none; align-items: center; gap: 10px; margin-bottom: 14px; padding: 12px 14px; border-radius: 12px;
@@ -175,13 +188,22 @@
 
   <!-- Session bar -->
   <div class="card session">
-    <div class="who">
-      <span class="signed">Signed in as <b id="userName">—</b></span>
-      <button class="primary" id="startBtn">Start measurement</button>
-      <button class="ghost" id="logoutBtn">Log out</button>
+    <div class="user">
+      <div class="avatar" id="avatar">?</div>
+      <div>
+        <div class="uname" id="userName">—</div>
+        <div class="sub">Signed in</div>
+      </div>
     </div>
     <div class="status" id="status">Press Start, then place your finger on the sensor.</div>
-    <div class="timer" id="timer">00:00</div>
+    <div class="actions">
+      <div class="timer-box">
+        <span class="sub">Session</span>
+        <span class="timer" id="timer">00:00</span>
+      </div>
+      <button class="primary" id="startBtn">Start measurement</button>
+      <button class="ghost" id="logoutBtn" title="Log out">Log out</button>
+    </div>
   </div>
 
   <!-- Alert banner -->
@@ -331,6 +353,11 @@
 
   // ================= Session controls =================
   let currentName = "";
+  function setUser(name) {
+    $("userName").textContent = name;
+    $("whoLabel").textContent = name;
+    $("avatar").textContent = (name.trim()[0] || "?").toUpperCase();
+  }
 
   $("startBtn").addEventListener("click", () => {
     measuring = !measuring;
@@ -624,7 +651,7 @@
         const cred = await createUserWithEmailAndPassword(auth, nameToEmail(name), pin);
         await updateProfile(cred.user, { displayName: name });
         await set(ref(db, `users/${cred.user.uid}/profile`), { name, createdAt: serverTimestamp() });
-        currentName = name; $("userName").textContent = name; $("whoLabel").textContent = name;
+        currentName = name; setUser(name);
       } else {
         await signInWithEmailAndPassword(auth, nameToEmail(name), pin);
       }
@@ -641,8 +668,7 @@
   onAuthStateChanged(auth, user => {
     if (user) {
       currentName = user.displayName || user.email.split("@")[0];
-      $("userName").textContent = currentName;
-      $("whoLabel").textContent = currentName;
+      setUser(currentName);
       $("authScreen").hidden = true;
       $("app").hidden = false;
       if (!stopLive) startLive();
