@@ -126,6 +126,9 @@
   .auth-card button.primary { width: 100%; height: 44px; margin-top: 6px; }
   .auth-error { color: var(--bad); font-size: 13px; min-height: 18px; margin-top: 10px; text-align: center; }
   .auth-note { color: var(--faint); font-size: 12px; text-align: center; margin-top: 14px; }
+  .demo-btn { width: 100%; height: 42px; margin-top: 4px; }
+  .or { display: flex; align-items: center; gap: 10px; color: var(--faint); font-size: 12px; margin: 16px 0 12px; }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
   .signed { display: flex; align-items: center; gap: 8px; }
   .signed b { font-weight: 600; }
   button.ghost { height: 34px; background: transparent; color: var(--muted); border: 1px solid var(--line); font-weight: 500; }
@@ -164,7 +167,9 @@
       <button class="primary" id="authBtn" type="submit">Log in</button>
       <div class="auth-error" id="authError"></div>
     </form>
-    <div class="auth-note">Student project, not a medical device</div>
+    <div class="or">or</div>
+    <button class="ghost demo-btn" id="demoBtn" type="button">View demo with simulated data</button>
+    <div class="auth-note">The demo runs in your browser. No account or device needed.<br>Student project, not a medical device</div>
   </div>
 </div>
 
@@ -192,7 +197,7 @@
       <div class="avatar" id="avatar">?</div>
       <div>
         <div class="uname" id="userName">—</div>
-        <div class="sub">Signed in</div>
+        <div class="sub" id="userSub">Signed in</div>
       </div>
     </div>
     <div class="status" id="status">Press Start, then place your finger on the sensor.</div>
@@ -663,9 +668,65 @@
     }
   });
 
-  $("logoutBtn").addEventListener("click", () => signOut(auth));
+  // ================= Demo mode: simulated readings generated in the browser =================
+  let demo = false, demoTimer = null, demoStart = 0;
+
+  function demoReading(t) {
+    const dip = (Math.floor(t / 1000) % 20) >= 14;          // same pattern as the firmware simulation
+    return {
+      bpm: 70 + Math.floor(Math.random() * 7),
+      spo2: dip ? 88 + Math.floor(Math.random() * 3) : 97 + Math.floor(Math.random() * 3),
+      alert: dip ? "LOW SpO2!" : null,
+      simulated: true,
+      rssi: -62 - Math.floor(Math.random() * 6),
+      uptime: Math.floor((t - demoStart) / 1000),
+      fw: "demo",
+      uploadMs: 80 + Math.floor(Math.random() * 40),
+      updatedAt: t
+    };
+  }
+
+  function startDemo() {
+    demo = true;
+    demoStart = Date.now() - 3600 * 1000;
+    setUser("Demo visitor");
+    $("userSub").textContent = "Demo mode";
+    $("sim").textContent = "DEMO DATA";
+    $("logoutBtn").textContent = "Exit demo";
+    $("status").textContent = "Demo mode: simulated readings generated in your browser.";
+    $("authScreen").hidden = true;
+    $("app").hidden = false;
+
+    // Backfill 3 minutes so the charts and tables have history right away
+    const now = Date.now();
+    for (let t = now - 180000; t < now; t += 1000) onLive(demoReading(t));
+    recvTimes.length = 0; delays.length = 0;
+
+    demoTimer = setInterval(() => onLive(demoReading(Date.now() - 250 - Math.random() * 200)), 1000);
+  }
+
+  function stopDemo() {
+    clearInterval(demoTimer); demoTimer = null; demo = false;
+    for (const k of Object.keys(live)) delete live[k];
+    points = []; alerts = []; lastMsg = 0; prevAlert = null;
+    $("sim").textContent = "SIMULATED";
+    $("logoutBtn").textContent = "Log out";
+    $("userSub").textContent = "Signed in";
+    $("status").textContent = "Press Start, then place your finger on the sensor.";
+    history.replaceState(null, "", location.pathname);
+    $("app").hidden = true;
+    $("authScreen").hidden = false;
+  }
+
+  $("demoBtn").addEventListener("click", () => {
+    history.replaceState(null, "", location.pathname + "?demo");
+    startDemo();
+  });
+
+  $("logoutBtn").addEventListener("click", () => demo ? stopDemo() : signOut(auth));
 
   onAuthStateChanged(auth, user => {
+    if (demo) return;   // demo mode ignores sign-in state
     if (user) {
       currentName = user.displayName || user.email.split("@")[0];
       setUser(currentName);
@@ -683,12 +744,15 @@
     }
   });
 
+  // Open straight into the demo with ?demo in the URL
+  if (new URLSearchParams(location.search).has("demo")) startDemo();
+
   // ================= Connection pill =================
   setInterval(() => {
     const pill = $("conn");
     if (!lastMsg) { $("connText").textContent = "Connecting…"; pill.className = "pill"; return; }
     const ok = Date.now() - lastMsg < OFFLINE_AFTER_MS;
-    $("connText").textContent = ok ? "Live" : "Offline";
+    $("connText").textContent = demo ? "Demo" : ok ? "Live" : "Offline";
     pill.className = "pill " + (ok ? "live" : "off");
   }, 1000);
 </script>

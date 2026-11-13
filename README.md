@@ -2,7 +2,12 @@
 
 **IoT pulse oximeter and heart rate monitor.** An ESP32 reads heart rate and blood oxygen (SpO₂), shows them on an OLED screen, and streams them to the cloud, where signed-in users watch live readings, trends and alerts from any phone or computer.
 
-**Live dashboard:** https://imnottmoee.github.io/PulseNode/ (account required)
+**Try the demo (no account needed):** https://imnottmoee.github.io/PulseNode/?demo
+Simulated readings generated in your browser, so you can explore every part of the dashboard even when the device is offline.
+
+**Live dashboard:** https://imnottmoee.github.io/PulseNode/ (account required; shows real-time data from the device when it's powered on)
+
+![PulseNode dashboard in demo mode](docs/dashboard-demo.png)
 
 > **Status:** the full device → cloud → dashboard pipeline is working end to end. The vitals are currently **simulated** on the ESP32 while the MAX30102 sensor is being integrated; the dashboard labels this data "SIMULATED".
 
@@ -27,6 +32,7 @@
 
 **Web dashboard**
 - Name + 6-digit PIN accounts (create account / log in)
+- Demo mode with simulated data (`?demo`), so visitors can try it without an account or the device
 - Live heart rate and SpO₂ with Normal / Low / High status tags
 - Trend charts with alert-threshold lines and 1 min / 5 min / All time ranges
 - Flashing alert banner and an alert log with start times and durations
